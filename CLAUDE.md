@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with LiveKit Agent projects in Python.
+
+## Project Overview
+
+This covers voice AI agent development with LiveKit Agents for Python. The concepts and patterns described here apply to building, extending, and improving LiveKit-based conversational AI agents.
 
 ## Development Commands
 
@@ -10,11 +14,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Copy `.env.example` to `.env` and configure API keys
 - `lk app env -w .env` - Auto-load LiveKit environment using CLI
 
-### Running the Agent
-- `uv run python src/agent.py download-files` - Download required models (Silero VAD, LiveKit turn detector) before first run
-- `uv run python src/agent.py console` - Run agent in terminal for direct interaction
-- `uv run python src/agent.py dev` - Run agent for frontend/telephony integration
-- `uv run python src/agent.py start` - Production mode
+### Running Agents
+- `uv run python <agent_file> download-files` - Download required models (Silero VAD, LiveKit turn detector) before first run
+- `uv run python <agent_file> console` - Run agent in terminal for direct interaction
+- `uv run python <agent_file> dev` - Run agent for frontend/telephony integration
+- `uv run python <agent_file> start` - Production mode
 
 ### Code Quality
 - `uv run ruff check .` - Run linter
@@ -24,66 +28,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Testing
 - `uv run pytest` - Run full test suite including evaluations
-- `uv run pytest tests/test_agent.py::test_offers_assistance` - Run specific test
+- `uv run pytest <test_file>::<test_function>` - Run specific test
 
-## Architecture
+## Architecture Concepts
 
 ### Core Components
-- `src/agent.py` - Main agent implementation with `Assistant` class inheriting from `Agent`
-- `Assistant` class contains agent instructions and function tools (e.g., `lookup_weather`)
-- `entrypoint()` function sets up the voice AI pipeline with STT/LLM/TTS components
+- **Agent Implementation** - Main agent class inheriting from `Agent` base class
+- **Agent Instructions** - System prompts and behavior definitions for the conversational AI
+- **Function Tools** - Methods decorated with `@function_tool` that extend agent capabilities
+- **Entrypoint Function** - Sets up the voice AI pipeline with STT/LLM/TTS components
 
-### Voice AI Pipeline
-The agent uses a modular pipeline approach:
-- **STT**: Deepgram Nova-3 model with multilingual support
-- **LLM**: OpenAI GPT-4o-mini (easily swappable)
-- **TTS**: Cartesia for voice synthesis
-- **Turn Detection**: LiveKit's multilingual turn detection model
-- **VAD**: Silero VAD for voice activity detection
-- **Noise Cancellation**: LiveKit Cloud BVC (can be omitted for self-hosting)
+### Voice AI Pipeline Architecture
+LiveKit agents use a modular pipeline approach with swappable components:
+- **STT (Speech-to-Text)**: Converts audio input to text transcripts
+- **LLM (Large Language Model)**: Processes conversations and generates responses
+- **TTS (Text-to-Speech)**: Converts text responses back to synthesized speech
+- **Turn Detection**: Determines when users finish speaking for natural conversation flow
+- **VAD (Voice Activity Detection)**: Detects when users are speaking vs silent
+- **Noise Cancellation**: Optional audio enhancement (LiveKit Cloud BVC or self-hosted alternatives)
 
-### Testing Framework
-Uses LiveKit Agents testing framework with evaluation-based tests:
-- Tests use `AgentSession` with real LLM interactions
-- `.judge()` method evaluates agent responses against intent descriptions
-- Mock tools available for testing error conditions
-- Supports both unit tests and end-to-end evaluations
+### Testing Framework Concepts
+LiveKit Agents provide evaluation-based testing:
+- **AgentSession**: Test harness that simulates real conversations with LLM interactions
+- **LLM-based Evaluation**: `.judge()` method evaluates agent responses against intent descriptions
+- **Mock Tools**: Enable testing of error conditions and external integrations
+- **End-to-End Testing**: Full conversation flow validation with real AI providers
 
-### Configuration
-- Environment variables loaded via `python-dotenv`
-- Required API keys: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, OPENAI_API_KEY, DEEPGRAM_API_KEY, CARTESIA_API_KEY
-- Alternative providers can be swapped by modifying the session setup in `entrypoint()`
+### Configuration Patterns
+- **Environment Variables**: Store API keys and configuration separately from code
+- **Provider Abstraction**: Swap AI providers without changing core agent logic
+- **Modular Setup**: Configure pipeline components independently in entrypoint functions
 
-### Function Tools
-Functions decorated with `@function_tool` are automatically passed to the LLM:
-- Must be async methods on the Agent class
-- Include docstrings with tool descriptions and argument specifications
-- Example: `lookup_weather()` for weather information retrieval
+### Function Tools Pattern
+Functions decorated with `@function_tool` extend agent capabilities:
+- **Async Methods**: All tools are async methods on the Agent class
+- **Structured Documentation**: Docstrings provide tool descriptions and argument specifications for LLM understanding
+- **External Integration**: Connect agents to APIs, databases, computations, and other services
+- **Natural Language Interface**: LLM decides when and how to use tools based on conversation context
 
-### Metrics and Logging
-- Integrated usage collection and metrics logging
-- Metrics collected via `MetricsCollectedEvent` handlers
-- Usage summaries logged on session shutdown
-- Room context automatically included in log entries
+### Metrics and Observability
+- **Automatic Metrics Collection**: Built-in tracking of STT/LLM/TTS performance and usage
+- **Event-Driven Logging**: `MetricsCollectedEvent` handlers for custom analytics
+- **Usage Summaries**: Session-level statistics and resource consumption tracking
+- **Contextual Logging**: Room and session context automatically included in log entries
 
-## Key Patterns
+## Key Development Patterns
 
-### Agent Customization
+### Agent Customization Approach
 To modify agent behavior:
-1. Update `instructions` in `Assistant.__init__()`
-2. Add new `@function_tool` methods for custom capabilities
-3. Swap STT/LLM/TTS providers in the `AgentSession` setup
+1. **Update Instructions**: Modify system prompts and behavioral guidelines
+2. **Add Function Tools**: Implement `@function_tool` methods for custom capabilities  
+3. **Swap AI Providers**: Configure different STT/LLM/TTS providers in session setup
+4. **Configure Pipeline**: Adjust turn detection, VAD, and audio processing settings
 
-### Testing New Features
-1. Add unit tests to `tests/test_agent.py`
-2. Use `.judge()` evaluations for response quality
-3. Mock external dependencies with `mock_tools()`
-4. Test both success and error conditions
+### Testing Strategy
+1. **Unit Testing**: Test individual agent functions and tool behavior
+2. **LLM Evaluation**: Use `.judge()` evaluations for response quality assessment
+3. **Mock External Dependencies**: Test error conditions with `mock_tools()`
+4. **Conversation Testing**: Validate full dialogue flows and user experience
 
-### Deployment
-- Production-ready with included `Dockerfile`
-- Uses `uv` for dependency management
-- CI/CD workflows for linting (`ruff.yml`) and testing (`tests.yml`)
+### Deployment Considerations
+- **Production Readiness**: Container support with Dockerfile patterns
+- **Dependency Management**: Use `uv` for reproducible Python environments
+- **CI/CD Integration**: Automated linting, formatting, and testing workflows
+- **Environment Configuration**: Secure API key management and environment-specific settings
 
 ## LiveKit Documentation & Examples
 
@@ -97,25 +105,21 @@ The LiveKit documentation is comprehensive and provides detailed guidance for al
 
 **Practical Examples Repository**: https://github.com/livekit-examples/python-agents-examples
 - Contains dozens of real-world agent implementations
-- Advanced patterns and use cases beyond the starter template
+- Advanced patterns and use cases beyond starter templates
 - Integration examples with various AI providers and tools
 - Production-ready code samples
 
-## Extending Agent Functionality
+## AI Provider Integration Patterns
 
-### Swapping AI Providers
-
-#### LLM Providers ([docs](https://docs.livekit.io/agents/integrations/llm/))
-Available providers with consistent interface:
+### LLM Provider Abstraction ([docs](https://docs.livekit.io/agents/integrations/llm/))
+All LLM providers follow consistent interfaces for easy swapping:
 - **OpenAI**: `openai.LLM(model="gpt-4o-mini")` ([docs](https://docs.livekit.io/agents/integrations/llm/openai/))
 - **Anthropic**: `anthropic.LLM(model="claude-3-haiku")` ([docs](https://docs.livekit.io/agents/integrations/llm/anthropic/))
 - **Google Gemini**: `google.LLM(model="gemini-1.5-flash")` ([docs](https://docs.livekit.io/agents/integrations/llm/google/))
 - **Azure OpenAI**: `azure_openai.LLM(model="gpt-4o")` ([docs](https://docs.livekit.io/agents/integrations/llm/azure-openai/))
-- **Groq**: ([docs](https://docs.livekit.io/agents/integrations/llm/groq/))
-- **Fireworks**: ([docs](https://docs.livekit.io/agents/integrations/llm/fireworks/))
-- **DeepSeek, Cerebras, Amazon Bedrock**, and others
+- **Additional Providers**: Groq, Fireworks, DeepSeek, Cerebras, Amazon Bedrock, and others
 
-#### STT Providers ([docs](https://docs.livekit.io/agents/integrations/stt/))
+### STT Provider Options ([docs](https://docs.livekit.io/agents/integrations/stt/))
 All support low-latency multilingual transcription:
 - **Deepgram**: `deepgram.STT(model="nova-3", language="multi")` ([docs](https://docs.livekit.io/agents/integrations/stt/deepgram/))
 - **AssemblyAI**: `assemblyai.STT()` ([docs](https://docs.livekit.io/agents/integrations/stt/assemblyai/))
@@ -123,17 +127,17 @@ All support low-latency multilingual transcription:
 - **Google Cloud**: `google.STT()` ([docs](https://docs.livekit.io/agents/integrations/stt/google/))
 - **OpenAI**: `openai.STT()` ([docs](https://docs.livekit.io/agents/integrations/stt/openai/))
 
-#### TTS Providers ([docs](https://docs.livekit.io/agents/integrations/tts/))
-High-quality, low-latency voice synthesis:
+### TTS Provider Selection ([docs](https://docs.livekit.io/agents/integrations/tts/))
+High-quality, low-latency voice synthesis options:
 - **Cartesia**: `cartesia.TTS(model="sonic-english")` ([docs](https://docs.livekit.io/agents/integrations/tts/cartesia/))
 - **ElevenLabs**: `elevenlabs.TTS()` ([docs](https://docs.livekit.io/agents/integrations/tts/elevenlabs/))
 - **Azure AI Speech**: `azure_ai_speech.TTS()` ([docs](https://docs.livekit.io/agents/integrations/tts/azure-ai-speech/))
 - **Amazon Polly**: `polly.TTS()` ([docs](https://docs.livekit.io/agents/integrations/tts/polly/))
 - **Google Cloud**: `google.TTS()` ([docs](https://docs.livekit.io/agents/integrations/tts/google/))
 
-### Alternative Pipeline Configurations
+## Alternative Pipeline Architectures
 
-#### OpenAI Realtime API ([docs](https://docs.livekit.io/agents/integrations/realtime/openai))
+### OpenAI Realtime API Integration ([docs](https://docs.livekit.io/agents/integrations/realtime/openai))
 Replace entire STT-LLM-TTS pipeline with single provider:
 ```python
 session = AgentSession(
@@ -144,126 +148,122 @@ session = AgentSession(
     )
 )
 ```
-- Built-in VAD with server or semantic modes
-- Lower latency than traditional pipeline
-- Supports audio and text processing
+- **Built-in VAD**: Server or semantic turn detection modes
+- **Lower Latency**: Single-provider processing reduces round-trip time
+- **Unified Processing**: Supports both audio and text processing in one model
 
-#### Custom Turn Detection
-**LiveKit Turn Detector** ([docs](https://docs.livekit.io/agents/build/turns/turn-detector/)):
+### Advanced Turn Detection ([docs](https://docs.livekit.io/agents/build/turns/turn-detector/))
+**LiveKit Turn Detector Models**:
 - **English Model**: `EnglishModel()` (66MB, ~15-45ms per turn)
 - **Multilingual Model**: `MultilingualModel()` (281MB, ~50-160ms, 14 languages)
-- Adds conversational context to VAD for better end-of-turn detection
+- **Enhanced Context**: Adds conversational understanding to VAD for better end-of-turn detection
 
-### Function Tools and Capabilities
+## Function Tools and Capability Extension
 
-#### Adding Custom Tools
+### Tool Implementation Patterns
 Functions decorated with `@function_tool` become available to the LLM:
 ```python
 @function_tool
-async def get_stock_price(self, context: RunContext, symbol: str):
-    """Get current stock price for a symbol.
+async def external_integration(self, context: RunContext, parameter: str):
+    """Description of what this tool does for the LLM.
     
     Args:
-        symbol: Stock ticker symbol (e.g., AAPL, GOOGL)
+        parameter: Clear description for LLM understanding
     """
-    # Implementation here
-    return f"Stock price for {symbol}: $150.00"
+    # Implementation logic (APIs, databases, computations, etc.)
+    return "structured result or simple string"
 ```
 
-#### Tool Integration Patterns
-- Use `logger.info()` for debugging tool calls
-- Return simple strings or structured data
-- Handle errors gracefully with try/catch
-- Tools run asynchronously and can access external APIs
+### Best Practices for Tool Development
+- **Async Implementation**: All tools should be async methods
+- **Clear Documentation**: Docstrings guide LLM understanding and usage
+- **Error Handling**: Graceful failure with informative error messages
+- **Simple Returns**: Return strings or simple structured data
+- **External Integration**: Connect to APIs, databases, or other services
+- **Contextual Logging**: Use `logger.info()` for debugging and monitoring
 
-### Testing and Evaluation ([docs](https://docs.livekit.io/agents/build/testing/))
+## Testing and Evaluation Strategies ([docs](https://docs.livekit.io/agents/build/testing/))
 
-#### Writing Agent Tests
-Use LiveKit's evaluation framework with LLM-based judgment:
+### LLM-Based Test Evaluation
+Use LiveKit's evaluation framework for intelligent testing:
 ```python
 @pytest.mark.asyncio
-async def test_custom_feature():
+async def test_agent_capability():
     async with AgentSession(llm=openai.LLM()) as session:
-        await session.start(Assistant())
+        await session.start(YourAgent())
         result = await session.run(user_input="Test query")
         
         await result.expect.next_event().is_message(role="assistant").judge(
-            llm, intent="Expected behavior description"
+            llm, intent="Description of expected behavior"
         )
 ```
 
-#### Mock Tools for Testing
+### Mock Tool Testing Patterns
 Test error conditions and edge cases:
 ```python
-with mock_tools(Assistant, {"tool_name": lambda: "mocked_response"}):
-    result = await session.run(user_input="test")
+with mock_tools(YourAgent, {"tool_name": lambda: "mocked_response"}):
+    result = await session.run(user_input="test input")
 ```
 
-#### Test Categories to Implement
-- **Expected Behavior**: Core functionality works correctly
-- **Tool Usage**: Function calls with proper arguments
-- **Error Handling**: Graceful failure responses
-- **Factual Grounding**: Accurate information, admits unknowns
-- **Misuse Resistance**: Refuses inappropriate requests
+### Comprehensive Test Categories
+- **Core Functionality**: Primary agent capabilities work correctly
+- **Tool Integration**: Function calls with proper arguments and responses
+- **Error Scenarios**: Graceful handling of failures and edge cases
+- **Information Accuracy**: Factual grounding and admission of limitations
+- **Safety & Ethics**: Appropriate refusal of inappropriate requests
 
-### Metrics and Monitoring ([docs](https://docs.livekit.io/agents/build/metrics/))
+## Metrics and Performance Monitoring ([docs](https://docs.livekit.io/agents/build/metrics/))
 
-#### Built-in Metrics Collection
-Automatic tracking of:
-- **STT Metrics**: Audio duration, transcript time, streaming mode
-- **LLM Metrics**: Completion duration, token usage, TTFT
-- **TTS Metrics**: Audio duration, character count, generation time
+### Automatic Metrics Collection
+Built-in tracking includes:
+- **STT Performance**: Audio duration, transcript timing, streaming efficiency
+- **LLM Metrics**: Response time, token usage, time-to-first-token (TTFT)
+- **TTS Efficiency**: Audio generation time, character processing, output duration
 
-#### Custom Metrics Implementation
+### Custom Metrics Implementation
 ```python
 @session.on("metrics_collected")
-def _on_metrics_collected(ev: MetricsCollectedEvent):
+def handle_metrics(ev: MetricsCollectedEvent):
+    # Process built-in metrics
     metrics.log_metrics(ev.metrics)
-    # Add custom metric processing
-    custom_usage_tracker.track(ev.metrics)
+    # Add custom analytics
+    custom_tracker.record(ev.metrics)
 ```
 
-#### Usage Tracking
+### Usage Analytics Patterns
 ```python
 usage_collector = metrics.UsageCollector()
-# Collect throughout session
-summary = usage_collector.get_summary()  # Get final usage stats
+# Collect metrics throughout session lifecycle
+final_summary = usage_collector.get_summary()  # Session statistics
 ```
 
-### Frontend Integration ([docs](https://docs.livekit.io/agents/start/frontend/))
+## Frontend Integration Strategies ([docs](https://docs.livekit.io/agents/start/frontend/))
 
-#### Starter App Templates
-Ready-to-use starter apps with full source code:
-- **Web (React/Next.js)**: https://github.com/livekit-examples/agent-starter-react
-- **iOS/macOS (Swift)**: https://github.com/livekit-examples/agent-starter-swift  
-- **Android (Kotlin)**: https://github.com/livekit-examples/agent-starter-android
-- **Flutter**: https://github.com/livekit-examples/agent-starter-flutter
-- **React Native**: https://github.com/livekit-examples/voice-assistant-react-native
-- **Web Embed Widget**: https://github.com/livekit-examples/agent-starter-embed
+### Ready-to-Use Starter Templates
+Complete application templates with full source code:
+- **Web Applications**: React/Next.js implementations
+- **Mobile Apps**: iOS/Swift, Android/Kotlin, Flutter, React Native
+- **Embedded Solutions**: Web widget and iframe integrations
 
-#### Custom Frontend Development
-- Use LiveKit SDKs (JavaScript, Swift, Android, Flutter, React Native)
-- Subscribe to audio/video tracks and transcription streams
-- Implement WebRTC for realtime connectivity
-- Add features like audio visualizers, virtual avatars, RPC calls
+### Custom Frontend Development Patterns
+- **LiveKit SDK Integration**: Use platform-specific SDKs for real-time connectivity
+- **Audio/Video Streaming**: Subscribe to agent tracks and transcription streams
+- **WebRTC Implementation**: Handle real-time communication protocols
+- **Enhanced UX Features**: Audio visualizers, virtual avatars, custom controls
+
+## Advanced Integration Capabilities
 
 ### Telephony Integration ([docs](https://docs.livekit.io/agents/start/telephony/))
-Add inbound or outbound calling capabilities to your agent with SIP integration.
+Add voice calling capabilities with SIP integration for inbound/outbound phone support.
 
-### Production Considerations
+### Production Deployment ([docs](https://docs.livekit.io/agents/ops/deployment/))
+- **LiveKit Cloud**: Managed hosting with enterprise features
+- **Self-Hosting**: Container-based deployment with provided Docker configurations
+- **Scaling Strategies**: Handle multiple concurrent sessions and load balancing
+- **Security Configuration**: API key management and access control
 
-#### Environment Configuration
-Required environment variables:
-- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
-- Provider-specific keys: `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`
-
-#### Deployment Options ([docs](https://docs.livekit.io/agents/ops/deployment/))
-- **LiveKit Cloud**: Managed hosting with enhanced features
-- **Self-hosting**: Use provided `Dockerfile` 
-- **Telephony**: SIP integration for phone calls
-- **Scaling**: Handle multiple concurrent sessions
-
-#### Key Files to Track in Production
-- Commit `uv.lock` for reproducible builds
-- Commit `livekit.toml` if using LiveKit Cloud
-- Remove template-specific CI checks
+### Environment Configuration Standards
+Required environment variables for different provider integrations:
+- **Core LiveKit**: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+- **AI Providers**: Provider-specific API keys (e.g., `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`)
+- **Configuration Management**: Use `.env` files and secure secret management
