@@ -66,8 +66,9 @@ LiveKit's provider abstraction enables flexible AI component selection:
 ### Environment Variables Required
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
 - Provider keys: `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`
+- These are just for the default providers - new providers may require new keys.
 
 ## Resources
-- **Documentation**: https://docs.livekit.io/agents/ (append `.md` for markdown)
-- **Examples**: https://github.com/livekit-examples/python-agents-examples
-- **Frontend Starters**: React, Swift, Android, Flutter templates available
+- **Documentation**: https://docs.livekit.io/agents/ (append `.md` for markdown format, or fetc `/llms.txt` at the root for a full index)
+- **Extensive collection of practical examples**: https://github.com/livekit-examples/python-agents-examples
+- **Frontend Starters**: [React](https://github.com/livekit-examples/agent-starter-react), [Swift](https://github.com/livekit-examples/agent-starter-swift), [Android](https://github.com/livekit-examples/ agent-starter-android), [Flutter](https://github.com/livekit-examples/agent-starter-flutter), [React Native](https://github.com/livekit-examples/agent-starter-react-native), and [Web Embed](https://github.com/livekit-examples/agent-starter-embed) templates available
