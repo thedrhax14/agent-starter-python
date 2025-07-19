@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with Li
 
 ## Project Overview
 
-This covers voice AI agent development with LiveKit Agents for Python. The concepts and patterns described here apply to building, extending, and improving LiveKit-based conversational AI agents.
+This covers multimodal AI agent development with LiveKit Agents, a realtime framework for production-grade voice, text, and vision AI agents. While this guide focuses on Python development, LiveKit also supports Node.js (beta). The concepts and patterns described here apply to building, extending, and improving LiveKit-based conversational AI agents across multiple platforms and use cases.
 
 ## Development Commands
 
@@ -38,14 +38,18 @@ This covers voice AI agent development with LiveKit Agents for Python. The conce
 - **Function Tools** - Methods decorated with `@function_tool` that extend agent capabilities
 - **Entrypoint Function** - Sets up the voice AI pipeline with STT/LLM/TTS components
 
-### Voice AI Pipeline Architecture
+### Multimodal AI Pipeline Architecture
 LiveKit agents use a modular pipeline approach with swappable components:
 - **STT (Speech-to-Text)**: Converts audio input to text transcripts
-- **LLM (Large Language Model)**: Processes conversations and generates responses
+- **LLM (Large Language Model)**: Processes conversations, text, and vision inputs to generate responses
 - **TTS (Text-to-Speech)**: Converts text responses back to synthesized speech
+- **Vision Processing**: Handles image and video understanding for multimodal interactions
 - **Turn Detection**: Determines when users finish speaking for natural conversation flow
 - **VAD (Voice Activity Detection)**: Detects when users are speaking vs silent
+- **Background Audio Handling**: Manages background audio and interruption scenarios
+- **Interrupt Management**: Handles conversation interruptions and context switching
 - **Noise Cancellation**: Optional audio enhancement (LiveKit Cloud BVC or self-hosted alternatives)
+- **Real-time Audio/Video Processing**: Low-latency multimedia stream handling
 
 ### Testing Framework Concepts
 LiveKit Agents provide evaluation-based testing:
@@ -117,7 +121,12 @@ All LLM providers follow consistent interfaces for easy swapping:
 - **Anthropic**: `anthropic.LLM(model="claude-3-haiku")` ([docs](https://docs.livekit.io/agents/integrations/llm/anthropic/))
 - **Google Gemini**: `google.LLM(model="gemini-1.5-flash")` ([docs](https://docs.livekit.io/agents/integrations/llm/google/))
 - **Azure OpenAI**: `azure_openai.LLM(model="gpt-4o")` ([docs](https://docs.livekit.io/agents/integrations/llm/azure-openai/))
-- **Additional Providers**: Groq, Fireworks, DeepSeek, Cerebras, Amazon Bedrock, and others
+- **Groq**: `groq.LLM()` ([docs](https://docs.livekit.io/agents/integrations/llm/groq/))
+- **Fireworks**: `fireworks.LLM()` ([docs](https://docs.livekit.io/agents/integrations/llm/fireworks/))
+- **DeepSeek**: `deepseek.LLM()` ([docs](https://docs.livekit.io/agents/integrations/llm/deepseek/))
+- **Cerebras**: `cerebras.LLM()` ([docs](https://docs.livekit.io/agents/integrations/llm/cerebras/))
+- **Amazon Bedrock**: `bedrock.LLM()` ([docs](https://docs.livekit.io/agents/integrations/llm/bedrock/))
+- **And others**: Additional providers regularly added
 
 ### STT Provider Options ([docs](https://docs.livekit.io/agents/integrations/stt/))
 All support low-latency multilingual transcription:
@@ -248,19 +257,48 @@ Complete application templates with full source code:
 ### Custom Frontend Development Patterns
 - **LiveKit SDK Integration**: Use platform-specific SDKs for real-time connectivity
 - **Audio/Video Streaming**: Subscribe to agent tracks and transcription streams
-- **WebRTC Implementation**: Handle real-time communication protocols
-- **Enhanced UX Features**: Audio visualizers, virtual avatars, custom controls
+- **WebRTC Implementation**: Handle real-time communication protocols with NAT traversal
+- **Enhanced UX Features**: 
+  - Audio visualizers and waveform displays
+  - Virtual avatars and character animations
+  - Custom UI controls and interaction patterns
+  - Real-time transcription overlays
+  - Visual feedback for agent processing states
+  - Interactive chat interfaces alongside voice
+- **Cross-Platform Support**: Consistent experience across web, mobile, and desktop
+
+## Workflow Modeling and Advanced Features
+
+### Workflow Modeling ([docs](https://docs.livekit.io/agents/build/workflows/))
+LiveKit supports sophisticated workflow modeling for complex agent behaviors:
+- **State Management**: Define agent states and transitions
+- **Conditional Logic**: Implement branching conversation flows
+- **Context Preservation**: Maintain conversation context across workflow steps
+- **Error Recovery**: Handle failures and provide graceful fallbacks
+- **Multi-Step Processes**: Guide users through complex tasks
+
+### Background Processing Capabilities
+- **Background Audio Handling**: Process audio while maintaining conversation flow
+- **Parallel Task Execution**: Handle multiple operations simultaneously
+- **Context Switching**: Seamlessly transition between different conversation topics
+- **Asynchronous Operations**: Non-blocking external API calls and computations
 
 ## Advanced Integration Capabilities
 
 ### Telephony Integration ([docs](https://docs.livekit.io/agents/start/telephony/))
-Add voice calling capabilities with SIP integration for inbound/outbound phone support.
+Add voice calling capabilities with SIP integration:
+- **Inbound/Outbound Calling**: Handle phone-based interactions
+- **SIP Protocol Support**: Industry-standard telephony integration
+- **Call Management**: Handle call routing, transfers, and conferencing
+- **Phone Number Provisioning**: Manage virtual phone numbers for agents
 
 ### Production Deployment ([docs](https://docs.livekit.io/agents/ops/deployment/))
 - **LiveKit Cloud**: Managed hosting with enterprise features
 - **Self-Hosting**: Container-based deployment with provided Docker configurations
+- **Kubernetes Support**: Production-grade orchestration and scaling
 - **Scaling Strategies**: Handle multiple concurrent sessions and load balancing
 - **Security Configuration**: API key management and access control
+- **High Availability**: Multi-region deployment and failover capabilities
 
 ### Environment Configuration Standards
 Required environment variables for different provider integrations:
