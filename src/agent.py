@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterable
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -9,45 +10,129 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     MetricsCollectedEvent,
+    ModelSettings,
     RoomInputOptions,
-    RunContext,
     WorkerOptions,
+    ChatContext,
+    FunctionTool,
     cli,
     metrics,
 )
-from livekit.agents.llm import function_tool
 from livekit.plugins import cartesia, deepgram, noise_cancellation, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from pydantic_core import from_json
+from pydantic import BaseModel
+
+from typing import cast
 
 logger = logging.getLogger("agent")
 
 load_dotenv(".env.local")
 
 
-class Assistant(Agent):
+class JSONAssistant(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="""You are a helpful voice AI assistant.
-            You eagerly assist users with their questions by providing information from your extensive knowledge.
-            Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols.
-            You are curious, friendly, and have a sense of humor.""",
+            instructions='You are a helpful voice AI assistant. Respond in JSON with a "response" field.'
         )
 
-    # all functions annotated with @function_tool will be passed to the LLM when this
-    # agent is active
-    @function_tool
-    async def lookup_weather(self, context: RunContext, location: str):
-        """Use this tool to look up current weather information in the given location.
+    async def _process_json(self, text: AsyncIterable[str]) -> AsyncIterable[str]:
+        last_response = ""
+        acc_text = ""
+        not_json = None  # None until first chunk is seen
+        async for chunk in text:
+            if not_json is None:
+                not_json = not chunk.startswith("{")
+            if not_json:
+                yield chunk
+                continue
 
-        If the location is not supported by the weather service, the tool will indicate this. You must tell the user the location's weather is unavailable.
+            acc_text += chunk
+            try:
+                resp: dict = from_json(acc_text, allow_partial="trailing-strings")
+            except ValueError:
+                continue
 
-        Args:
-            location: The location to look up weather information for (e.g. city name)
-        """
+            response = resp.get("response", "")
+            delta = (
+                response[len(last_response) :]
+                if response.startswith(last_response)
+                else response
+            )
+            if delta:
+                yield delta
+                last_response = response
 
-        logger.info(f"Looking up weather for {location}")
+    async def tts_node(self, text: AsyncIterable[str], model_settings: ModelSettings):
+        return Agent.default.tts_node(self, self._process_json(text), model_settings)
 
-        return "sunny with a temperature of 70 degrees."
+    async def transcription_node(
+        self, text: AsyncIterable[str], model_settings: ModelSettings
+    ):
+        return Agent.default.transcription_node(
+            self, self._process_json(text), model_settings
+        )
+
+
+class StructuredOutputAssistant(Agent):
+    def __init__(self) -> None:
+        self._openai_llm = openai.LLM(model="gpt-4o-mini")
+        super().__init__(
+            instructions="You are a helpful voice AI assistant.", llm=self._openai_llm
+        )
+
+    class Response(BaseModel):
+        spoken_response: str
+
+    async def llm_node(
+        self,
+        chat_ctx: ChatContext,
+        tools: list[FunctionTool],
+        model_settings: ModelSettings,
+    ):
+        tool_choice = model_settings.tool_choice if model_settings else NOT_GIVEN
+        async with self._openai_llm.chat(
+            chat_ctx=chat_ctx,
+            tools=tools,
+            tool_choice=tool_choice,
+            response_format=self.Response,
+        ) as stream:
+            async for chunk in stream:
+                yield chunk
+
+    async def _process_response(self, text: AsyncIterable[str]) -> AsyncIterable[str]:
+        last_response = ""
+        acc_text = ""
+        async for chunk in text:
+            acc_text += chunk
+            try:
+                resp: self.Response = from_json(
+                    acc_text, allow_partial="trailing-strings"
+                )
+            except ValueError:
+                continue
+
+            response = resp.spoken_response
+            delta = (
+                response[len(last_response) :]
+                if response.startswith(last_response)
+                else response
+            )
+            if delta:
+                yield delta
+                last_response = resp.response
+
+    async def tts_node(self, text: AsyncIterable[str], model_settings: ModelSettings):
+        return Agent.default.tts_node(
+            self, self._process_response(text), model_settings
+        )
+
+    async def transcription_node(
+        self, text: AsyncIterable[str], model_settings: ModelSettings
+    ):
+        return Agent.default.transcription_node(
+            self, self._process_response(text), model_settings
+        )
 
 
 def prewarm(proc: JobProcess):
@@ -55,29 +140,16 @@ def prewarm(proc: JobProcess):
 
 
 async def entrypoint(ctx: JobContext):
-    # Logging setup
-    # Add any other context you want in all log entries here
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
 
-    # Set up a voice AI pipeline using OpenAI, Cartesia, Deepgram, and the LiveKit turn detector
     session = AgentSession(
-        # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
-        # See all providers at https://docs.livekit.io/agents/integrations/llm/
         llm=openai.LLM(model="gpt-4o-mini"),
-        # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
-        # See all providers at https://docs.livekit.io/agents/integrations/stt/
         stt=deepgram.STT(model="nova-3", language="multi"),
-        # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
-        # See all providers at https://docs.livekit.io/agents/integrations/tts/
         tts=cartesia.TTS(voice="6f84f4b8-58a2-430c-8c79-688dad597532"),
-        # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
-        # See more at https://docs.livekit.io/agents/build/turns
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
-        # allow the LLM to generate a response while waiting for the end of turn
-        # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
         preemptive_generation=True,
     )
 
@@ -87,15 +159,11 @@ async def entrypoint(ctx: JobContext):
     #     llm=openai.realtime.RealtimeModel()
     # )
 
-    # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
-    # when it's detected, you may resume the agent's speech
     @session.on("agent_false_interruption")
     def _on_agent_false_interruption(ev: AgentFalseInterruptionEvent):
         logger.info("false positive interruption, resuming")
         session.generate_reply(instructions=ev.extra_instructions or NOT_GIVEN)
 
-    # Metrics collection, to measure pipeline performance
-    # For more information, see https://docs.livekit.io/agents/build/metrics/
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
@@ -109,27 +177,21 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(log_usage)
 
-    # # Add a virtual avatar to the session, if desired
-    # # For other providers, see https://docs.livekit.io/agents/integrations/avatar/
+    # # Optional: Add a virtual avatar to the session
     # avatar = hedra.AvatarSession(
     #   avatar_id="...",  # See https://docs.livekit.io/agents/integrations/avatar/hedra
     # )
     # # Start the avatar and wait for it to join
     # await avatar.start(session, room=ctx.room)
 
-    # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(),
+        agent=StructuredOutputAssistant(),
         room=ctx.room,
         room_input_options=RoomInputOptions(
-            # LiveKit Cloud enhanced noise cancellation
-            # - If self-hosting, omit this parameter
-            # - For telephony applications, use `BVCTelephony` for best results
             noise_cancellation=noise_cancellation.BVC(),
         ),
     )
 
-    # Join the room and connect to the user
     await ctx.connect()
 
 
