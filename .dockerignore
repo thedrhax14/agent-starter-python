@@ -46,3 +46,9 @@ test/
 tests/
 eval/
 evals/
+
+# Docker artifacts - IMPORTANT!
+*.tar
+*.tar.gz
+Dockerfile.*
+docker-compose.*

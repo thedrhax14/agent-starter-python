@@ -1,4 +1,6 @@
 import logging
+import json
+import aiohttp
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -23,13 +25,81 @@ logger = logging.getLogger("agent")
 load_dotenv(".env.local")
 
 
+async def fetch_room_metadata(room_name: str) -> dict:
+    """Fetch room metadata from the API"""
+    url = f"https://api.builder.holofair.io/api/livekit/rooms/metadata"
+    params = {"roomName": room_name}
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    logger.info(f"Fetched metadata for room {room_name}: {data}")
+                    return data
+                else:
+                    logger.error(f"Failed to fetch metadata for room {room_name}: HTTP {response.status}")
+                    return {}
+    except Exception as e:
+        logger.error(f"Error fetching metadata for room {room_name}: {e}")
+        return {}
+
+
+async def fetch_instruction(instruction_id: int, metaverse_id: int = 1) -> str:
+    """Fetch instruction text from the API"""
+    url = f"https://api.builder.holofair.io/api/agents/instruction"
+    params = {
+        "instruction_id": instruction_id,
+        "metaverse_id": metaverse_id
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Assuming the API returns the instruction text in a specific field
+                    # Adjust this based on the actual API response structure
+                    return data.get("instruction", "You are a helpful voice AI assistant.")
+                else:
+                    logger.error(f"Failed to fetch instruction: HTTP {response.status}")
+                    return "You are a helpful voice AI assistant."
+    except Exception as e:
+        logger.error(f"Error fetching instruction: {e}")
+        return "You are a helpful voice AI assistant."
+
+
+def should_join_room(metadata: dict) -> tuple[bool, int, int]:
+    """
+    Check if the agent should join the room based on metadata.
+    Returns (should_join, instruction_id, metaverse_id)
+    """
+    try:
+        instruction_id = metadata.get("instruction_id")
+        metaverse_id = metadata.get("metaverse_id", 1)  # Default to 1 if not specified
+        
+        # Check if instruction_id exists and is greater than 0
+        if instruction_id is not None:
+            instruction_id = int(instruction_id)
+            if instruction_id > 0:
+                return True, instruction_id, int(metaverse_id)
+        
+        return False, 0, 1
+    except (ValueError, TypeError) as e:
+        logger.error(f"Error parsing metadata: {e}")
+        return False, 0, 1
+
+
 class Assistant(Agent):
-    def __init__(self) -> None:
-        super().__init__(
-            instructions="""You are a helpful voice AI assistant.
+    def __init__(self, instructions: str = None) -> None:
+        # Use custom instructions if provided, otherwise use default
+        default_instructions = """You are a helpful voice AI assistant.
             You eagerly assist users with their questions by providing information from your extensive knowledge.
             Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols.
-            You are curious, friendly, and have a sense of humor.""",
+            You are curious, friendly, and have a sense of humor."""
+        
+        super().__init__(
+            instructions=instructions or default_instructions,
         )
 
     # all functions annotated with @function_tool will be passed to the LLM when this
@@ -54,6 +124,24 @@ def prewarm(proc: JobProcess):
 
 
 async def entrypoint(ctx: JobContext):
+    # Fetch room metadata from API using room name
+    room_name = ctx.room.name
+    logger.info(f"Fetching metadata for room: {room_name}")
+    
+    metadata = await fetch_room_metadata(room_name)
+    
+    # Check if agent should join this room
+    should_join, instruction_id, metaverse_id = should_join_room(metadata)
+    
+    if not should_join:
+        logger.info(f"Skipping room {room_name} - no valid instruction_id in metadata")
+        return
+    
+    logger.info(f"Joining room {room_name} with instruction_id: {instruction_id}, metaverse_id: {metaverse_id}")
+    
+    # Fetch custom instructions from API
+    custom_instructions = await fetch_instruction(instruction_id, metaverse_id)
+    
     # Logging setup
     # Add any other context you want in all log entries here
     ctx.log_context_fields = {
@@ -98,7 +186,7 @@ async def entrypoint(ctx: JobContext):
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(),
+        agent=Assistant(instructions=custom_instructions),
         room=ctx.room,
         room_input_options=RoomInputOptions(
             # LiveKit Cloud enhanced noise cancellation
