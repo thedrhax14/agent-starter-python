@@ -6,6 +6,8 @@
 
 A complete starter project for building voice AI apps with [LiveKit Agents for Python](https://github.com/livekit/agents).
 
+**🚀 Quick Deployment**: See [Docker Deployment Steps](#docker-deployment-steps) for EC2/OpenVidu deployment.
+
 The starter project includes:
 
 - A simple voice AI assistant based on the [Voice AI quickstart](https://docs.livekit.io/agents/start/voice-ai/)
@@ -105,6 +107,114 @@ Once you've started your own project based on this repo, you should:
 ## Deploying to production
 
 This project is production-ready and includes a working `Dockerfile`. To deploy it to LiveKit Cloud or another environment, see the [deploying to production](https://docs.livekit.io/agents/ops/deployment/) guide.
+
+### Docker Deployment Steps
+
+This agent has been customized to fetch room metadata and instructions from your API. Follow these steps to deploy:
+
+#### 1. Build the Docker Image
+
+**Option A: Build for AMD64 (recommended for EC2)**
+```bash
+# Build for x86_64/AMD64 architecture (most cloud instances)
+docker buildx build --platform linux/amd64 -t agent-starter-python:latest --load .
+```
+
+**Option B: Build locally (if on same architecture)**
+```bash
+docker build -t agent-starter-python:latest .
+```
+
+#### 2. Transfer to EC2 Instance
+
+**Method 1: Save/Load (recommended for one-time deployment)**
+```bash
+# Save the image to a tar file
+docker save agent-starter-python:latest > agent-starter-python.tar
+
+# Transfer to EC2 (replace YOUR_EC2_IP with actual IP)
+scp agent-starter-python.tar ec2-user@YOUR_EC2_IP:/home/ec2-user/
+
+# SSH into EC2 and load the image
+ssh ec2-user@YOUR_EC2_IP
+docker load < agent-starter-python.tar
+docker images | grep agent-starter-python  # Verify
+```
+
+**Method 2: Build directly on EC2**
+```bash
+# Transfer source code
+scp -r /path/to/agent-starter-python ec2-user@YOUR_EC2_IP:/home/ec2-user/
+
+# SSH and build
+ssh ec2-user@YOUR_EC2_IP
+cd agent-starter-python
+docker build -t agent-starter-python:latest .
+```
+
+**Method 3: Docker Registry (recommended for production)**
+```bash
+# Push to Docker Hub
+docker tag agent-starter-python:latest your-username/agent-starter-python:latest
+docker push your-username/agent-starter-python:latest
+
+# Pull on EC2
+ssh ec2-user@YOUR_EC2_IP
+docker pull your-username/agent-starter-python:latest
+```
+
+#### 3. Configure OpenVidu Agent
+
+Create an `agent-AGENT_NAME.yaml` file in your OpenVidu configuration folder:
+
+```yaml
+# Docker image of the agent
+docker_image: agent-starter-python:latest
+
+# Whether to run the agent or not
+enabled: true
+
+# Environment variables (replace with your actual values)
+environment:
+  LIVEKIT_URL: "wss://your-livekit-url"
+  LIVEKIT_API_KEY: "your-api-key"
+  LIVEKIT_API_SECRET: "your-api-secret"  
+  OPENAI_API_KEY: "your-openai-key"
+```
+
+#### 4. API Integration
+
+This agent automatically fetches room metadata and instructions from your API:
+
+- **Metadata API**: `GET https://api.builder.holofair.io/api/livekit/rooms/metadata?roomName={roomName}`
+- **Instructions API**: `GET https://api.builder.holofair.io/api/agents/instruction?instruction_id={id}&metaverse_id={id}`
+
+The agent will only join rooms where:
+- Room metadata contains `instruction_id > 0`
+- Uses `metaverse_id` from metadata (defaults to 1)
+
+#### 5. Test the Deployment
+
+```bash
+# Test manually (optional)
+docker run --rm \
+  -e LIVEKIT_URL="your-url" \
+  -e LIVEKIT_API_KEY="your-key" \
+  -e LIVEKIT_API_SECRET="your-secret" \
+  -e OPENAI_API_KEY="your-openai-key" \
+  agent-starter-python:latest
+
+# Check container status
+docker ps
+docker logs <container-id>
+```
+
+### Troubleshooting
+
+- **Architecture mismatch**: Use `--platform linux/amd64` when building on Mac for EC2
+- **Large image size**: Ensure `*.tar` files are in `.dockerignore`
+- **Environment variables**: Verify all required env vars are set in OpenVidu config
+- **API connectivity**: Ensure EC2 can reach `api.builder.holofair.io`
 
 ## License
 
