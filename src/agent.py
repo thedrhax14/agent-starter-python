@@ -19,6 +19,7 @@ from livekit.agents import (
 )
 from livekit.agents.llm import function_tool
 from livekit.plugins import noise_cancellation, openai, silero
+from livekit.plugins.turn_detector.english import EnglishModel
 
 logger = logging.getLogger("agent")
 
@@ -150,6 +151,13 @@ async def entrypoint(ctx: JobContext):
 
     # To use a realtime model instead of a voice pipeline, use the following session setup instead:
     session = AgentSession(
+        # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
+        # See more at https://docs.livekit.io/agents/build/turns
+        turn_detection=EnglishModel(),
+        vad=silero.VAD.load(),
+        # allow the LLM to generate a response while waiting for the end of turn
+        # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
+        preemptive_generation=True,
         # See all providers at https://docs.livekit.io/agents/integrations/realtime/
         llm=openai.realtime.RealtimeModel(voice="marin")
     )
