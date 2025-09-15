@@ -46,8 +46,11 @@ async def fetch_room_metadata(room_name: str) -> dict:
         return {}
 
 
-async def fetch_instruction(instruction_id: int, metaverse_id: int = 1) -> str:
-    """Fetch instruction text from the API"""
+async def fetch_instruction(instruction_id: int, metaverse_id: int = 1) -> tuple[str, list]:
+    """
+    Fetch instruction text and MCP servers from the API
+    Returns (instruction_text, mcp_servers_config)
+    """
     url = f"https://api.builder.holofair.io/api/agents/instruction"
     params = {
         "instruction_id": instruction_id,
@@ -59,15 +62,62 @@ async def fetch_instruction(instruction_id: int, metaverse_id: int = 1) -> str:
             async with session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Assuming the API returns the instruction text in a specific field
-                    # Adjust this based on the actual API response structure
-                    return data.get("instruction", "You are a helpful voice AI assistant.")
+                    # Extract instruction text
+                    instruction_text = data.get("instruction", "You are a helpful voice AI assistant.")
+                    
+                    # Extract MCP servers configuration
+                    mcp_servers_config = data.get("mcp_servers", [])
+                    logger.info(f"Fetched instruction and {len(mcp_servers_config)} MCP servers for instruction_id: {instruction_id}")
+                    
+                    return instruction_text, mcp_servers_config
                 else:
                     logger.error(f"Failed to fetch instruction: HTTP {response.status}")
-                    return "You are a helpful voice AI assistant."
+                    return "You are a helpful voice AI assistant.", []
     except Exception as e:
         logger.error(f"Error fetching instruction: {e}")
-        return "You are a helpful voice AI assistant."
+        return "You are a helpful voice AI assistant.", []
+
+
+def create_mcp_servers(mcp_servers_config: list) -> list:
+    """
+    Create MCP server instances from configuration
+    Expected config format: [{"name": "server1", "transport": "websocket", "url": "wss://..."}]
+    """
+    mcp_servers = []
+    
+    for config in mcp_servers_config:
+        try:
+            name = config.get("name")
+            transport = config.get("transport", "websocket")
+            url = config.get("url")
+            
+            if not name or not url:
+                logger.warning(f"Invalid MCP server config: {config}")
+                continue
+            
+            # Create MCP server configuration
+            # Note: The exact implementation depends on the LiveKit Agents MCP API
+            # This is a placeholder structure that should be adapted to the actual API
+            mcp_server_config = {
+                "name": name,
+                "transport": transport,
+                "url": url,
+            }
+            
+            # Add additional config fields if present
+            if "headers" in config:
+                mcp_server_config["headers"] = config["headers"]
+            if "env" in config:
+                mcp_server_config["env"] = config["env"]
+            
+            mcp_servers.append(mcp_server_config)
+            logger.info(f"Added MCP server: {name} ({transport}): {url}")
+            
+        except Exception as e:
+            logger.error(f"Error creating MCP server from config {config}: {e}")
+            continue
+    
+    return mcp_servers
 
 
 def should_join_room(metadata: dict) -> tuple[bool, int, int]:
@@ -92,7 +142,7 @@ def should_join_room(metadata: dict) -> tuple[bool, int, int]:
 
 
 class Assistant(Agent):
-    def __init__(self, instructions: str = None) -> None:
+    def __init__(self, instructions: str = None, mcp_servers: list = None) -> None:
         # Use custom instructions if provided, otherwise use default
         default_instructions = """You are a helpful voice AI assistant.
             You eagerly assist users with their questions by providing information from your extensive knowledge.
@@ -101,6 +151,7 @@ class Assistant(Agent):
         
         super().__init__(
             instructions=instructions or default_instructions,
+            mcp_servers=mcp_servers,
         )
 
     # all functions annotated with @function_tool will be passed to the LLM when this
@@ -140,8 +191,13 @@ async def entrypoint(ctx: JobContext):
     
     logger.info(f"Joining room {room_name} with instruction_id: {instruction_id}, metaverse_id: {metaverse_id}")
     
-    # Fetch custom instructions from API
-    custom_instructions = await fetch_instruction(instruction_id, metaverse_id)
+    # Fetch custom instructions and MCP servers from API
+    custom_instructions, mcp_servers_config = await fetch_instruction(instruction_id, metaverse_id)
+    
+    # Create MCP server instances
+    mcp_servers = create_mcp_servers(mcp_servers_config)
+    
+    logger.info(f"Using {len(mcp_servers)} MCP servers for this session")
     
     # Logging setup
     # Add any other context you want in all log entries here
@@ -194,7 +250,7 @@ async def entrypoint(ctx: JobContext):
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(instructions=custom_instructions),
+        agent=Assistant(instructions=custom_instructions, mcp_servers=mcp_servers),
         room=ctx.room,
         room_input_options=RoomInputOptions(
             # LiveKit Cloud enhanced noise cancellation
@@ -202,6 +258,10 @@ async def entrypoint(ctx: JobContext):
             # - For telephony applications, use `BVCTelephony` for best results
             noise_cancellation=noise_cancellation.BVC(),
         ),
+    )
+
+    await session.generate_reply(
+        instructions="Greet the user and introduce yourself in English only. Then proceed with the goal of the primary instruction.",
     )
 
     # Join the room and connect to the user

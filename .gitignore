@@ -11,3 +11,4 @@ KMS
 .pytest_cache
 .ruff_cache
 agent-starter-python.tar
+holofair-agent-starter-python-v1.0.0.tar
